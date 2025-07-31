@@ -2,6 +2,8 @@
 
 This analysis is mainly to asign GO terms for orthogroups and summarize based on UP/DOWN-exression.
 
+Please note, in-house python scripts can be found in <[02.GO_annotation](https://github.com/chongjing/OrthoFinder_GO/tree/main/02.GO_annotation/1.interproscan)> and <[03.Summary_UP_DOWN_for_each_orthogroup](https://github.com/chongjing/OrthoFinder_GO/tree/main/03.Summary_UP_DOWN_for_each_orthogroup)> directories.
+
 ## 1.Orthogroups
 ```bash
 cd /data/pathology/cxia/projects/Sebastian/Victor/1.orthofinder/
