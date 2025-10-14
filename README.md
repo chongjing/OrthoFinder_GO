@@ -76,3 +76,121 @@ paste -d'\t' <(awk '{print $1"\t"$2}' 101.Arab.UP.GO-label.tsv) <(awk '{print $2
 
 Expected output:
 <img src="https://github.com/chongjing/OrthoFinder_GO/blob/main/03.Summary_UP_DOWN_for_each_orthogroup/002.summary_with_GO/20.UP.GO-label.jpg" alt="Image 1" width="600"/>
+
+## 5. ENA EMBL submission
+5.1 install webin-cli https://ena-docs.readthedocs.io/en/latest/submit/general-guide/webin-cli.html
+```bash
+cd /home/cx264/rds/rds-csc_programmes-FTKWLWDeHys/programs/webin-cli
+wget https://github.com/enasequence/webin-cli/releases/download/9.0.1/webin-cli-9.0.1.jar
+``
+5.2 login Webin submission Portal to register study and samples, via https://www.ebi.ac.uk/ena/submit/webin/login
+
+| Type       | Accession    | Unique name (alias)                  |
+|------------|--------------|--------------------------------------|
+| Project    | PRJEB100529  | 26ca3a6e-6baa-4f04-a327-e29411fc3df5 |
+| Submission | ERA35056725  | SUBMISSION-11-10-2025-07:43:28:740   |
+
+5.3 Submission
+After get sample accessions, prepare metadata table with header like
+
+```bash
+cd ~/rds/rds-csc_programmes-FTKWLWDeHys/chongjing/01.Sebastian/01.Victor
+#prepare a sample file fastq2_template_1760166804427.tsv:
+| sample_id   | study      | sample_acc  | instrument          | library_name | source         | selection   | strategy | layout | fq1             | fq1_md5                          | fq2             | fq2_md5                          |
+|-------------|------------|-------------|---------------------|--------------|----------------|-------------|----------|--------|-----------------|----------------------------------|-----------------|----------------------------------|
+| ERS27017987 | PRJEB100529 | ERS27017987 | Illumina HiSeq 2500 | arab_c1     | TRANSCRIPTOMIC | RANDOM PCR | RNA-Seq | PAIRED | arab_c1_1.fq.gz | a2dcae8f99493c8e84036a5b121a82d3 | arab_c1_2.fq.gz | 67b7a234abe3a1bcd07e6a4db967e3e8 |
+| ERS27017988 | PRJEB100529 | ERS27017988 | Illumina HiSeq 2500 | arab_c2     | TRANSCRIPTOMIC | RANDOM PCR | RNA-Seq | PAIRED | arab_c2_1.fq.gz | d8f51409fd28daa3c7c33161e88fe2c8 | arab_c2_2.fq.gz | 749f619d33ab0a5e95b659157b36034a |
+```
+prepare `gene_manifests.py`:
+```python
+import csv, os
+
+# Input TSV
+INPUT = "fastq2_template_1760166804427.tsv"
+# Output dirs
+MANIFEST_DIR = "manifests"
+CHECKSUM_FILE = "checksums.md5"
+
+os.makedirs(MANIFEST_DIR, exist_ok=True)
+
+checksums = []
+
+with open(INPUT) as f:
+    reader = csv.DictReader(f, delimiter="\t")
+    for row in reader:
+        manifest = f"""STUDY\t{row['study']}
+SAMPLE\t{row['sample_acc']}
+NAME\t{row['library_name']}
+INSTRUMENT\t{row['instrument']}
+LIBRARY_NAME\t{row['library_name']}
+LIBRARY_SOURCE\t{row['source']}
+LIBRARY_SELECTION\t{row['selection']}
+LIBRARY_STRATEGY\t{row['strategy']}
+FASTQ\t{row['fq1']}
+FASTQ\t{row['fq2']}
+"""
+        fname = os.path.join(MANIFEST_DIR, f"{row['library_name']}.manifest.txt")
+        with open(fname, "w") as out:
+            out.write(manifest)
+        print(f"Wrote {fname}")
+
+        # Collect checksums
+        checksums.append(f"{row['fq1_md5']}  {row['fq1']}")
+        checksums.append(f"{row['fq2_md5']}  {row['fq2']}")
+
+# Write combined checksums file
+with open(CHECKSUM_FILE, "w") as out:
+    out.write("\n".join(checksums) + "\n")
+
+print(f"Wrote {CHECKSUM_FILE}")
+```
+
+prepare submission script:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+WEBIN_USER="Webin-69760"
+WEBIN_PASS="" ###password here
+JAR="$HOME/rds/rds-csc_programmes-FTKWLWDeHys/programs/webin-cli/webin-cli-9.0.1.jar"
+OUTDIR="./webin_out"
+
+mkdir -p "$OUTDIR"
+
+for m in manifests/*.manifest.txt; do
+  echo "Validating $m"
+  /rds/project/rds-FTKWLWDeHys/programs/java/jdk-17.0.10/bin/java -jar "$JAR" -context reads -manifest "$m" \
+       -userName "$WEBIN_USER" -password "$WEBIN_PASS" \
+       -outputDir "$OUTDIR" -validate
+
+  echo "Submitting $m"
+  /rds/project/rds-FTKWLWDeHys/programs/java/jdk-17.0.10/bin/java -jar "$JAR" -context reads -manifest "$m" \
+       -userName "$WEBIN_USER" -password "$WEBIN_PASS" \
+       -outputDir "$OUTDIR" -submit
+done
+```
+
+Submission.
+```bash
+python3 generate_manifests.py
+./submit_reads.sh
+```
+Successful submission should look like this:
+```bash
+% ./submit_reads.sh
+Validating manifests/arab_c1.manifest.txt
+INFO : Your application version is 9.0.1
+INFO : Submission(s) validated successfully.
+INFO : Creating report file: /rds/project/rds-FTKWLWDeHys/chongjing/01.Sebastian/01.Victor/./webin_out/./webin-cli.report
+Submitting manifests/arab_c1.manifest.txt
+INFO : Your application version is 9.0.1
+INFO : Connecting to FTP server : webin2.ebi.ac.uk
+INFO : Creating report file: /rds/project/rds-FTKWLWDeHys/chongjing/01.Sebastian/01.Victor/./webin_out/./webin-cli.report
+INFO : Uploading file: /rds/project/rds-FTKWLWDeHys/chongjing/01.Sebastian/01.Victor/arab_c1_1.fq.gz
+INFO : Uploading file: /rds/project/rds-FTKWLWDeHys/chongjing/01.Sebastian/01.Victor/arab_c1_2.fq.gz
+INFO : Files have been uploaded to webin2.ebi.ac.uk.
+INFO : The submission has been completed successfully. The following run accession was assigned to the submission: ERR15696041
+INFO : The submission has been completed successfully. The following experiment accession was assigned to the submission: ERX15100159
+```
+
