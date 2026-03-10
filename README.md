@@ -77,20 +77,116 @@ paste -d'\t' <(awk '{print $1"\t"$2}' 101.Arab.UP.GO-label.tsv) <(awk '{print $2
 Expected output:
 <img src="https://github.com/chongjing/OrthoFinder_GO/blob/main/03.Summary_UP_DOWN_for_each_orthogroup/002.summary_with_GO/20.UP.GO-label.jpg" alt="Image 1" width="600"/>
 
-## 5. ENA EMBL submission
-5.1 install webin-cli https://ena-docs.readthedocs.io/en/latest/submit/general-guide/webin-cli.html
+## 5. GO presence/absence plot
+```bash
+cd /home/cx264/project/Sebastian/05.victor/02.Plot
+sed -i -e 's/\"//g' -e '/GO_term/d' ./DEGs_*
+cat ./DEGs_* | sort | uniq > 01.AllGO.list
+python3 02.GO_presence.py 01.AllGO.list DEGs_* > matrix.csv
+#re-ordered
+# plot
+conda activate R4.5.1
+/home/cx264/program/anaconda3/envs/R4.5.1/bin/R
+```
+
+```R
+# ----------------------------------------------------------------------
+# Heatmap of GO term presence/absence with two colors:
+#   - red for rows ending with "_up"
+#   - blue for rows ending with "_down"
+#   - white for 0
+# ----------------------------------------------------------------------
+
+# ---------------------------
+# 1. Load required packages
+# ---------------------------
+if (!require("pheatmap")) {
+  install.packages("pheatmap", repos = "https://cloud.r-project.org")
+  library(pheatmap)
+}
+if (!require("RColorBrewer")) {
+  install.packages("RColorBrewer", repos = "https://cloud.r-project.org")
+  library(RColorBrewer)
+}
+
+# ---------------------------
+# 2. Read the data
+# ---------------------------
+data <- read.table("08.GO_presence_UP_DOWN.csv", header = TRUE, row.names =1, sep = ",", check.names = FALSE)
+# Ensure only 0 and 1 (in case of any other values)
+data[data != 0 & data != 1] <- 0
+
+# ---------------------------
+# 3. Separate rows by type (up / down)
+# ---------------------------
+# Identify rows ending with "_up" or "_down"
+up_rows <- grepl("_up$", rownames(data))
+down_rows <- grepl("_down$", rownames(data))
+binary_mat <- as.matrix(data)
+
+# Create a color‑coding matrix:
+#   - For up rows: keep 1 as 1
+#   - For down rows: change 1 to 2
+#   - 0 remains 0
+color_mat <- binary_mat
+color_mat[down_rows & binary_mat == 1] <- 2
+
+# ---------------------------
+# 4. Define colors and breaks
+# ---------------------------
+# Colors: white for 0, red for 1 (up), blue for 2 (down)
+colors <- c("white", "red", "blue")
+
+# Breaks must be set so that:
+#   values ≤ 0.5 → white (0)
+#   0.5 < values ≤ 1.5 → red (1)
+#   1.5 < values ≤ 2.5 → blue (2)
+breaks <- c(-0.1, 0.5, 1.5, 2.5)
+make_italic_names <- function(names) {
+  lapply(names, function(n) bquote(italic(.(n))))
+  }
+italic_labels <- make_italic_names(rownames(data))
+
+# ---------------------------
+# 5. Generate heatmap and save as PDF
+# ---------------------------
+p <- pheatmap(as.matrix(color_mat),
+              cluster_rows = FALSE,          # use our hierarchical clustering
+              cluster_cols = TRUE,       # do not cluster GO terms (can be changed)
+              color = colors,
+              breaks = breaks,
+              fontsize_row = 4,            # small row labels (species)
+              fontsize_col = 4,            # small column labels (GO terms)
+              cellwidth = 6,
+              cellheight = 4,
+              border_color = "white",           # remove cell borders for cleaner look
+              angle_col = "45",             # tilt column labels if many
+              legend = FALSE,               # no legend (optional: set TRUE and add)
+              labels_row = italic_labels,   # italic species names
+              main = "GO term presence/absence", width_in = 24, height_in = 12
+              )
+
+pdf("09.GO_presence_heatmap.4.pdf", height=4, width=8)
+p
+dev.off()
+```
+
+<img src="https://github.com/chongjing/OrthoFinder_GO/blob/main/04.Plot/09.GO_presence_heatmap.4.jpeg" alt="Image 1" width="600"/>
+
+## 6. ENA EMBL submission
+6.1 install webin-cli https://ena-docs.readthedocs.io/en/latest/submit/general-guide/webin-cli.html
 ```bash
 cd /home/cx264/rds/rds-csc_programmes-FTKWLWDeHys/programs/webin-cli
 wget https://github.com/enasequence/webin-cli/releases/download/9.0.1/webin-cli-9.0.1.jar
 ``
-5.2 login Webin submission Portal to register study and samples, via https://www.ebi.ac.uk/ena/submit/webin/login
+6.2 login Webin submission Portal to register study and samples, via https://www.ebi.ac.uk/ena/submit/webin/login
 
 | Type       | Accession    | Unique name (alias)                  |
 |------------|--------------|--------------------------------------|
 | Project    | PRJEB100529  | 26ca3a6e-6baa-4f04-a327-e29411fc3df5 |
 | Submission | ERA35056725  | SUBMISSION-11-10-2025-07:43:28:740   |
 
-5.3 Submission
+6.3 Submission
 After get sample accessions, prepare metadata table with header like
 
 ```bash
@@ -152,7 +248,7 @@ prepare submission script:
 set -euo pipefail
 
 WEBIN_USER="Webin-69760"
-WEBIN_PASS="" ###password here
+WEBIN_PASS="Xia05578678409!" ###password here
 JAR="$HOME/rds/rds-csc_programmes-FTKWLWDeHys/programs/webin-cli/webin-cli-9.0.1.jar"
 OUTDIR="./webin_out"
 
